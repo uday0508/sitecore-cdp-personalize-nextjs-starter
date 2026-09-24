@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { EventDemoPanel } from '@/src/components/EventDemoPanel';
+import { HeroSection } from '@/src/components/HeroSection';
 
 export default function HomePage() {
   return (
@@ -8,11 +9,7 @@ export default function HomePage() {
         <h1 className="text-4xl font-bold text-gray-900 mb-4">
           Sitecore CDP + Personalize Starter
         </h1>
-        <p className="text-lg text-gray-600 mb-8">
-          Browser-side event collection and Personalize decisioning via the Sitecore Cloud SDK.
-        </p>
-
-        <nav className="mb-8">
+        <nav className="mb-8 flex gap-3">
           <Link
             href="/personalization"
             className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
@@ -20,7 +17,7 @@ export default function HomePage() {
             Personalization Demo →
           </Link>
         </nav>
-
+        <HeroSection />
         <EventDemoPanel />
       </div>
     </main>

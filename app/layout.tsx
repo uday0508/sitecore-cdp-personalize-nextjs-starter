@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import { CloudSDKProvider } from '@/src/sitecore/cdp/client/CloudSDKProvider';
+import { WebPersonalizationTrigger } from '@/src/components/WebPersonalizationTrigger';
 
 export const metadata: Metadata = {
   title: 'Sitecore CDP + Personalize Starter',
@@ -15,7 +16,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="antialiased">
-        <CloudSDKProvider>{children}</CloudSDKProvider>
+        <CloudSDKProvider>
+          <WebPersonalizationTrigger />
+          {children}
+        </CloudSDKProvider>
       </body>
     </html>
   );

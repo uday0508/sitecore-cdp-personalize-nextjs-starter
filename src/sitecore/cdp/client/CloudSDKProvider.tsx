@@ -20,7 +20,11 @@ export function CloudSDKProvider({ children }: { children: React.ReactNode }) {
       .addEvents()
       .addPersonalize({
         enablePersonalizeCookie: true,
-        webPersonalization: true,
+        webPersonalization: {
+          language: "en", // Explicit language targeting code
+          async: true,
+          defer: true
+        }
       })
       .initialize();
   }, []);
