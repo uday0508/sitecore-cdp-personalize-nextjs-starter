@@ -12,9 +12,12 @@
     "@sitecore-cloudsdk/core": "^0.6.1",
     "@sitecore-cloudsdk/events": "^0.6.1",
     "@sitecore-cloudsdk/personalize": "^0.6.1",
+    "@tailwindcss/postcss": "^4.3.3",
     "next": "^15.0.0",
+    "postcss": "^8.5.28",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "tailwindcss": "^4.3.3"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

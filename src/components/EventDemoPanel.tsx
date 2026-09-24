@@ -60,42 +60,50 @@ export function EventDemoPanel() {
   }
 
   return (
-    <section style={{ display: 'grid', gap: '1rem', maxWidth: '640px' }}>
-      <h2>Event Collection Demo</h2>
+    <section className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+      <h2 className="text-2xl font-semibold text-gray-900 mb-4">Event Collection Demo</h2>
 
-      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-        <button onClick={handleViewEvent}>Send VIEW event</button>
+      <div className="flex flex-wrap gap-3 mb-4">
+        <button
+          onClick={handleViewEvent}
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+        >
+          Send VIEW event
+        </button>
 
         <input
           type="email"
           placeholder="user@example.com"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          style={{ padding: '0.5rem' }}
+          className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
         />
-        <button onClick={handleIdentityEvent}>Send IDENTITY event</button>
 
-        <button onClick={handleCustomEvent}>Send Custom Event</button>
+        <button
+          onClick={handleIdentityEvent}
+          className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+        >
+          Send IDENTITY event
+        </button>
+
+        <button
+          onClick={handleCustomEvent}
+          className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+        >
+          Send Custom Event
+        </button>
       </div>
 
-      <pre
-        style={{
-          background: '#111',
-          color: '#0f0',
-          padding: '1rem',
-          borderRadius: '4px',
-          minHeight: '120px',
-          overflow: 'auto',
-          fontSize: '0.8rem',
-        }}
-      >
+      <pre className="bg-gray-900 text-green-400 p-4 rounded-lg min-h-[120px] overflow-auto text-sm font-mono">
         {log.length ? log.join('\n') : 'Waiting for events...'}
       </pre>
 
-      <p style={{ fontSize: '0.85rem', color: '#666' }}>
+      <p className="text-sm text-gray-500 mt-4">
         Open DevTools → Network, filter for{' '}
-        <code>edge-platform.sitecorecloud.io/events</code> to verify event
-        requests.
+        <code className="bg-gray-100 px-1 rounded">
+          edge-platform.sitecorecloud.io/events
+        </code>{' '}
+        to verify event requests.
       </p>
     </section>
   );

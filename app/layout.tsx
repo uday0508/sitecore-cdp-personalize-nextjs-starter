@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import './globals.css';
 import { CloudSDKProvider } from '@/src/sitecore/cdp/client/CloudSDKProvider';
 
 export const metadata: Metadata = {
@@ -13,7 +14,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>
+      <body className="antialiased">
         <CloudSDKProvider>{children}</CloudSDKProvider>
       </body>
     </html>

@@ -1,6 +1,3 @@
-// src/sitecore/cdp/events/types.ts
-
-// VERIFIED: https://doc.sitecore.com/sdk/en/developers/006/cloud-sdk/cloud-sdk-events-identitydata.html
 export interface Identifier {
   id: string;
   provider: string;

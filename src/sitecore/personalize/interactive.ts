@@ -1,11 +1,11 @@
 import { personalize } from '@sitecore-cloudsdk/personalize/browser';
 
-// VERIFIED: personalize({ channel, currency, friendlyId, ... })
 export interface PersonalizeData {
   friendlyId: string;
   channel: string;
   currency: string;
   language?: string;
+  params?: Record<string, string>;
 }
 
 export async function runInteractiveExperience(
