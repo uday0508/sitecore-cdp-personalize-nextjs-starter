@@ -16,7 +16,9 @@ export default function PersonalizationPage() {
     try {
       const response = await runInteractiveExperience({
         // Replace with your Interactive Experience friendly ID from Sitecore Personalize
-        friendlyId: 'your_interactive_experience_friendly_id',
+        friendlyId: 'demo_interactive',
+        channel: 'WEB',
+        currency: 'USD',
       });
       setResult(response);
     } catch (err) {
@@ -30,8 +32,7 @@ export default function PersonalizationPage() {
     <main style={{ padding: '2rem', fontFamily: 'system-ui' }}>
       <h1>Personalize Interactive Experience</h1>
       <p>
-        Runs a Sitecore Personalize Interactive Experience and displays the
-        API response.
+        Runs a Sitecore Personalize Interactive Experience and displays the API response.
       </p>
 
       <button onClick={fetchExperience} disabled={loading}>

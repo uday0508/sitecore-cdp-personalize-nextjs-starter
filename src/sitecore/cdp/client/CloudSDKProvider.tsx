@@ -4,7 +4,6 @@ import { useEffect, useRef } from 'react';
 import { CloudSDK } from '@sitecore-cloudsdk/core/browser';
 import '@sitecore-cloudsdk/events/browser';
 import '@sitecore-cloudsdk/personalize/browser';
-import { publicEnv } from '@/src/config/env';
 
 export function CloudSDKProvider({ children }: { children: React.ReactNode }) {
   const initialized = useRef(false);
@@ -14,8 +13,8 @@ export function CloudSDKProvider({ children }: { children: React.ReactNode }) {
     initialized.current = true;
 
     CloudSDK({
-      sitecoreEdgeContextId: publicEnv.sitecoreEdgeContextId,
-      siteName: publicEnv.sitecoreSiteName,
+      sitecoreEdgeContextId: process.env.NEXT_PUBLIC_SITECORE_EDGE_CONTEXT_ID!,
+      siteName: process.env.NEXT_PUBLIC_SITECORE_SITE_NAME!,
       enableBrowserCookie: true,
     })
       .addEvents()

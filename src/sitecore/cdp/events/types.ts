@@ -1,27 +1,25 @@
-// Matches official PageViewData interface from Cloud SDK docs
-export interface ViewEventData {
-  channel: string;
-  currency: string;
-  language: string;
-  page: string;
-  pageVariantId?: string;
-  pointOfSale?: string;
+// src/sitecore/cdp/events/types.ts
+
+// VERIFIED: https://doc.sitecore.com/sdk/en/developers/006/cloud-sdk/cloud-sdk-events-identitydata.html
+export interface Identifier {
+  id: string;
+  provider: string;
+  expiryDate?: string;
 }
 
-// Matches official IdentityData interface
-export interface IdentityEventData {
-  channel?: string;
-  currency?: string;
+export interface EventAttributesInput {
   language?: string;
   page?: string;
+  channel?: string;
+  currency?: string;
+}
+
+export interface IdentityData extends EventAttributesInput {
+  identifiers: Identifier[];
   email?: string;
   firstName?: string;
   lastName?: string;
-  identifiers: Array<{
-    id: string;
-    provider: string;
-  }>;
+  extensionData?: ExtensionData;
 }
 
-// Extension data: max 50 custom attributes
 export type ExtensionData = Record<string, string | number | boolean>;

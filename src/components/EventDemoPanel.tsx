@@ -48,11 +48,11 @@ export function EventDemoPanel() {
 
   async function handleCustomEvent() {
     try {
-      await sendCustomEvent(
-        'starter:PRODUCT_INTERACTION',
-        { ...eventContext },
-        { productId: 'demo-001', interactionType: 'view' }
-      );
+      await sendCustomEvent({
+        type: 'starter:PRODUCT_INTERACTION',
+        ...eventContext,
+        extensionData: { productId: 'demo-001', interactionType: 'view' },
+      });
       appendLog('Custom event sent');
     } catch (error) {
       appendLog(`Custom error: ${error instanceof Error ? error.message : error}`);

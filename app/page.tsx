@@ -6,8 +6,7 @@ export default function HomePage() {
     <main style={{ padding: '2rem', fontFamily: 'system-ui' }}>
       <h1>Sitecore CDP + Personalize Starter</h1>
       <p>
-        This starter demonstrates browser-side event collection via the
-        Sitecore Cloud SDK.
+        Browser-side event collection via the Sitecore Cloud SDK.
       </p>
       <nav style={{ marginBottom: '2rem' }}>
         <Link href="/personalization">Personalization Demo →</Link>
