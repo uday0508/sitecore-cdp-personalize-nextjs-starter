@@ -1,21 +1,16 @@
-import { engage } from '@sitecore-cloudsdk/events/browser';
+import { identity } from '@sitecore-cloudsdk/events/browser';
 import type { IdentityEventData, ExtensionData } from './types';
 
+/**
+ * Sends an IDENTITY event using the official identity function.
+ * The identifiers array is required and triggers identity resolution in CDP.
+ */
 export async function sendIdentityEvent(
   data: IdentityEventData,
   extensionData?: ExtensionData
 ): Promise<void> {
-  const payload = {
-    channel: data.channel,
-    currency: data.currency,
-    pointOfSale: data.pointOfSale,
-    language: data.language,
-    page: data.page,
-    ...(data.email && { email: data.email }),
-    ...(data.firstname && { firstname: data.firstname }),
-    ...(data.lastname && { lastname: data.lastname }),
-    ...(data.identifiers && { identifiers: data.identifiers }),
-  };
-
-  await engage.identity(payload, extensionData);
+  await identity({
+    ...data,
+    ...(extensionData && { extensionData }),
+  });
 }

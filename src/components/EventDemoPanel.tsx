@@ -8,7 +8,6 @@ import { sendCustomEvent } from '@/src/sitecore/cdp/events/custom';
 const eventContext = {
   channel: 'WEB',
   currency: 'USD',
-  pointOfSale: 'starter/global',
   language: 'EN',
   page: 'home',
 };
@@ -23,7 +22,7 @@ export function EventDemoPanel() {
 
   async function handleViewEvent() {
     try {
-      await sendViewEvent(eventContext, { pageType: 'homepage' });
+      await sendViewEvent(eventContext);
       appendLog('VIEW event sent');
     } catch (error) {
       appendLog(`VIEW error: ${error instanceof Error ? error.message : error}`);
@@ -36,14 +35,11 @@ export function EventDemoPanel() {
       return;
     }
     try {
-      await sendIdentityEvent(
-        {
-          ...eventContext,
-          email,
-          identifiers: [{ id: email, provider: 'email' }],
-        },
-        { source: 'starter-kit-demo' }
-      );
+      await sendIdentityEvent({
+        ...eventContext,
+        email,
+        identifiers: [{ id: email, provider: 'email' }],
+      });
       appendLog(`IDENTITY event sent for ${email}`);
     } catch (error) {
       appendLog(`IDENTITY error: ${error instanceof Error ? error.message : error}`);
@@ -54,7 +50,7 @@ export function EventDemoPanel() {
     try {
       await sendCustomEvent(
         'starter:PRODUCT_INTERACTION',
-        eventContext,
+        { ...eventContext },
         { productId: 'demo-001', interactionType: 'view' }
       );
       appendLog('Custom event sent');
@@ -97,8 +93,9 @@ export function EventDemoPanel() {
       </pre>
 
       <p style={{ fontSize: '0.85rem', color: '#666' }}>
-        Open DevTools → Network to verify requests to Sitecore CDP endpoints.
-        You can also inspect cookies starting with <code>sc_</code>.
+        Open DevTools → Network, filter for{' '}
+        <code>edge-platform.sitecorecloud.io/events</code> to verify event
+        requests.
       </p>
     </section>
   );

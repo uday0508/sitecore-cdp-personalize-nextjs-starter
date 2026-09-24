@@ -1,24 +1,27 @@
-export interface BaseEventData {
+// Matches official PageViewData interface from Cloud SDK docs
+export interface ViewEventData {
   channel: string;
   currency: string;
-  pointOfSale: string;
   language: string;
   page: string;
+  pageVariantId?: string;
+  pointOfSale?: string;
 }
 
-export interface ViewEventData extends BaseEventData {
-  // VIEW events can carry page-level context
-  pageVariant?: string;
-}
-
-export interface IdentityEventData extends BaseEventData {
+// Matches official IdentityData interface
+export interface IdentityEventData {
+  channel?: string;
+  currency?: string;
+  language?: string;
+  page?: string;
   email?: string;
-  firstname?: string;
-  lastname?: string;
-  identifiers?: Array<{
+  firstName?: string;
+  lastName?: string;
+  identifiers: Array<{
     id: string;
     provider: string;
   }>;
 }
 
+// Extension data: max 50 custom attributes
 export type ExtensionData = Record<string, string | number | boolean>;

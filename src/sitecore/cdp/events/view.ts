@@ -1,18 +1,16 @@
-import { engage } from '@sitecore-cloudsdk/events/browser';
+import { pageView } from '@sitecore-cloudsdk/events/browser';
 import type { ViewEventData, ExtensionData } from './types';
 
+/**
+ * Sends a VIEW event using the official pageView function.
+ * @see https://doc.sitecore.com/sdk/en/developers/006/cloud-sdk/cloud-sdk-events-browser.html
+ */
 export async function sendViewEvent(
   data: ViewEventData,
   extensionData?: ExtensionData
 ): Promise<void> {
-  const payload = {
-    channel: data.channel,
-    currency: data.currency,
-    pointOfSale: data.pointOfSale,
-    language: data.language,
-    page: data.page,
-    ...(data.pageVariant && { pageVariant: data.pageVariant }),
-  };
-
-  await engage.event('VIEW', payload, extensionData);
+  await pageView({
+    ...data,
+    ...(extensionData && { extensionData }),
+  });
 }

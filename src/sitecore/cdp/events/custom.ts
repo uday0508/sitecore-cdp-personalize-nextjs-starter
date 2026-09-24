@@ -1,25 +1,31 @@
-import { engage } from '@sitecore-cloudsdk/events/browser';
-import type { BaseEventData, ExtensionData } from './types';
+import { event } from '@sitecore-cloudsdk/events/browser';
+import type { ExtensionData } from './types';
 
+/**
+ * Sends a custom event using the official event function.
+ * Reserved event names (starting with "SC_") are blocked.
+ * @see https://doc.sitecore.com/sdk/en/developers/005/cloud-sdk/cloud-sdk-events-eventdata.html
+ */
 export async function sendCustomEvent(
-  eventName: string,
-  data: BaseEventData,
+  type: string,
+  data: {
+    channel?: string;
+    currency?: string;
+    language?: string;
+    page?: string;
+  } = {},
   extensionData?: ExtensionData
 ): Promise<void> {
-  if (eventName.startsWith('SC_')) {
+  if (type.startsWith('SC_')) {
     throw new Error(
-      `Custom event names must not start with "SC_". ` +
-      `"SC_" is reserved by Sitecore CDP for internal events.`
+      `Custom event type must not start with "SC_". ` +
+      `"SC_" is reserved by Sitecore CDP.`
     );
   }
 
-  const payload = {
-    channel: data.channel,
-    currency: data.currency,
-    pointOfSale: data.pointOfSale,
-    language: data.language,
-    page: data.page,
-  };
-
-  await engage.event(eventName, payload, extensionData);
+  await event({
+    type,
+    ...data,
+    ...(extensionData && { extensionData }),
+  });
 }

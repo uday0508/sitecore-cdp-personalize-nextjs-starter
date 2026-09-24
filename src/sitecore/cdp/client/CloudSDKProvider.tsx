@@ -6,11 +6,7 @@ import '@sitecore-cloudsdk/events/browser';
 import '@sitecore-cloudsdk/personalize/browser';
 import { publicEnv } from '@/src/config/env';
 
-interface CloudSDKProviderProps {
-  children: React.ReactNode;
-}
-
-export function CloudSDKProvider({ children }: CloudSDKProviderProps) {
+export function CloudSDKProvider({ children }: { children: React.ReactNode }) {
   const initialized = useRef(false);
 
   useEffect(() => {
