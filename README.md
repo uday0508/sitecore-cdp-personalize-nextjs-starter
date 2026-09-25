@@ -18,6 +18,7 @@ This starter kit is intentionally focused. It demonstrates the documented integr
 - [Sitecore Personalize](#sitecore-personalize)
 - [Decision Model Integration](#decision-model-integration)
 - [Web Experience Integration](#web-experience-integration)
+- [Triggered Experience Integration](#triggered-experience-integration)
 - [Validation](#validation)
 - [Troubleshooting](#troubleshooting)
 - [Official Documentation References](#official-documentation-references)
@@ -42,6 +43,7 @@ This starter kit is intentionally focused. It demonstrates the documented integr
 - **Programmable Decision** logic that runs inside Personalize (not in Next.js)
 - **FreeMarker API Response** with `getDecisionModelResultNode()` for surfacing decision output
 - **Web Experience** rendering via `webPersonalization: true` and the `hero-section` target
+- **Triggered Experience** webhook destination via a Next.js API route
 
 ### Next.js App Router
 
@@ -50,6 +52,7 @@ This starter kit is intentionally focused. It demonstrates the documented integr
 - Tailwind CSS v4 for UI
 - Strict TypeScript with path aliases
 - Flicker-free Web Experience target using a skeleton rendered once inside the target element
+- A test webhook endpoint for inspecting Triggered Experience payloads
 
 ---
 
@@ -65,18 +68,34 @@ This starter kit is intentionally focused. It demonstrates the documented integr
 
 ## Architecture
 
-```mermaid
-flowchart TD
-    B["Browser<br/>1. Cloud SDK initializes<br/>2. Events sent to CDP<br/>3. personalize() to Personalize<br/>4. Web Experiences injected"]
-    CDP["Sitecore CDP<br/>• Guest profile<br/>• Identity<br/>• Events<br/>• Segments"]
-    P["Sitecore Personalize<br/>• Interactive Exp.<br/>• Web Experience<br/>• Decision Model<br/>• Programmable Dec."]
-    UI["Next.js UI renders decision result"]
-
-    B --> CDP
-    B --> P
-    CDP <--> P
-    P --> UI
-    CDP --> UI
+```
++------------------------------------------------------------+
+| Browser                                                    |
+|                                                            |
+| 1. Cloud SDK initializes with Context ID + Site Name       |
+| 2. Events (VIEW / IDENTITY / custom) sent to CDP           |
+| 3. personalize() call sent to Sitecore Personalize         |
+| 4. Web Experiences injected into .hero-section             |
+|                                                            |
++-------------+--------------------------+-------------------+
+              |                          |
+              v                          v
+    +-----------------+      +----------------------+
+    | Sitecore CDP    |      | Sitecore Personalize |
+    |                 |      |                      |
+    | * Guest profile |      | * Interactive Exp.   |
+    | * Identity      |<-----+ * Web Experience     |
+    | * Events        |      | * Decision Model     |
+    | * Segments      |      | * Programmable Dec.  |
+    +-----------------+      | * Triggered Exp.     |
+              ^              +----------+-----------+
+              |                         |
+              |                         v
+              |              +----------------------+
+              |              | Next.js Webhook      |
+              +--------------| /api/personalize/    |
+                             | webhook              |
+                             +----------------------+
 ```
 
 ### Responsibility Boundaries
@@ -85,8 +104,8 @@ flowchart TD
 |---|---|---|
 | Cloud SDK | Browser | Event collection, cookies, `personalize()` calls, Web Experience injection |
 | Sitecore CDP | Sitecore Cloud | Guest profiles, identity resolution, segmentation |
-| Sitecore Personalize | Sitecore Cloud | Decisioning, Interactive Experiences, Web Experiences, FreeMarker templating |
-| Next.js | Browser + Server | UI rendering, integration boundaries, route handlers |
+| Sitecore Personalize | Sitecore Cloud | Decisioning, Interactive Experiences, Web Experiences, Triggered Experiences |
+| Next.js | Browser + Server | UI rendering, integration boundaries, route handlers, webhook receiver |
 
 ---
 
@@ -94,7 +113,7 @@ flowchart TD
 
 - **Node.js 18+**
 - **A Sitecore CDP tenant** with a valid Context ID
-- **A Sitecore Personalize tenant** with at least one Interactive Experience and one Web Experience
+- **A Sitecore Personalize tenant** with at least one Interactive Experience, one Web Experience, and one Triggered Experience
 - **SitecoreAI access** — the Cloud SDK only works for JSS Next.js apps hosted on SitecoreAI
 - A browser with DevTools for validation
 
@@ -248,15 +267,28 @@ window.scCloudSDK.personalize.triggerExperiences();
 
 **Note:** `triggerExperiences` is not exported from `@sitecore-cloudsdk/personalize`. It is injected onto `window.scCloudSDK.personalize` after the Cloud SDK initializes. Access it via `window`, not via import.
 
-### Web Experience vs Interactive Experience
+### Triggered Experience
 
-| Feature | Web Experience | Interactive Experience |
-|---|---|---|
-| Configured by | Marketers | Developers |
-| Delivery | Injected `<script>` tag + DOM replacement | JSON API response |
-| Rendering | Client-side DOM injection | Your React components |
-| Flicker risk | Yes — architectural | No |
-| Best for | Marketing overlays, banners, popups | Structured personalization, primary content |
+Triggered Experiences send personalized content to **external destinations** (ESP, SMS, Push provider) via HTTP webhooks. They are configured entirely in Sitecore Personalize — no rendering happens in the browser.
+
+The flow:
+
+1. Create a **Connection** in Personalize pointing to an external endpoint.
+2. Create a **Triggered Experience** with the webhook body composed via FreeMarker.
+3. Add a **Trigger** — a Standard event (Guest Created, Order Created, Session Closed) or a Custom event that matches a `type` you send from your application.
+4. Set the experience to **Live**.
+
+Your Next.js application does not render the Triggered Experience. It only fires the custom event that triggers it. The payload is delivered to the external endpoint.
+
+### Web Experience vs Interactive Experience vs Triggered Experience
+
+| Feature | Web Experience | Interactive Experience | Triggered Experience |
+|---|---|---|---|
+| Configured by | Marketers | Developers | Marketers / Developers |
+| Delivery | Injected `<script>` + DOM replacement | JSON API response | HTTP webhook to external destination |
+| Rendering | Client-side DOM injection | Your React components | External system |
+| Flicker risk | Yes — architectural | No | Not applicable |
+| Best for | Marketing overlays, banners, popups | Structured personalization, primary content | Email, SMS, push, external systems |
 
 ---
 
@@ -440,6 +472,95 @@ Include it in `app/layout.tsx` inside `<CloudSDKProvider>`.
 
 ---
 
+## Triggered Experience Integration
+
+Triggered Experiences are configured entirely in Sitecore Personalize. The only code contribution from your Next.js application is:
+
+1. A **custom event** that fires the trigger (already implemented in `src/sitecore/cdp/events/custom.ts`).
+2. A **webhook receiver** endpoint to inspect the outgoing payload during development.
+
+### The Test Webhook Endpoint
+
+Add `app/api/personalize/webhook/route.ts`:
+
+```typescript
+import { NextRequest, NextResponse } from 'next/server';
+
+export async function POST(request: NextRequest) {
+  const raw = await request.text();
+
+  console.log('=== Personalize Webhook Received ===');
+  console.log('Content-Type:', request.headers.get('content-type'));
+  console.log('Raw body:', raw);
+  console.log('=====================================');
+
+  let parsed: unknown = null;
+  try {
+    parsed = JSON.parse(raw);
+    console.log('Parsed JSON:', JSON.stringify(parsed, null, 2));
+  } catch {
+    // FreeMarker was not resolved — this is expected during
+    // the Connection test in Sitecore Personalize.
+    console.log('Body is not JSON (expected during Connection test).');
+  }
+
+  return NextResponse.json({ status: 'received' }, { status: 200 });
+}
+```
+
+### Why the Endpoint Accepts Non-JSON
+
+When you test the **Connection** in the Sitecore Personalize editor, the request body is sent **without FreeMarker resolution**. The body contains literal template syntax like `${guest.ref}` which is not valid JSON.
+
+`request.json()` would throw and cause the test to fail. Using `request.text()` and attempting to parse inside a `try/catch` allows the connection test to succeed while still logging the resolved payload when a real experience runs.
+
+### Connecting the Webhook to Personalize
+
+1. **Deploy the Next.js app** so the endpoint is publicly reachable (Vercel, or `npx localtunnel --port 3000` for local).
+2. In Sitecore Personalize, go to **Developer Center > Connections** and create a **Destination**.
+3. Set **Request URL** to your endpoint (e.g., `https://your-app.vercel.app/api/personalize/webhook`).
+4. Set **Content-Type** to `application/json`.
+5. In the **Request** body, compose the FreeMarker payload (see below).
+6. Click **Test Request** — the connection test sends the raw template and expects a 2xx response.
+
+### Sample Webhook Payload
+
+```json
+{
+  "guestId": "${guest.ref}",
+  "email": "${guest.email!}",
+  "firstName": "${guest.firstName!}",
+  "persona": "${getDecisionModelResultNode("Calculate Persona").outputs[0].CalculatePersona!\"Visitor\"}",
+  "message": "<#if getDecisionModelResultNode("Calculate Persona").outputs[0].CalculatePersona == "VIP">Welcome back, valued customer!<#else>Welcome to our site!</#if>",
+  "eventType": "${event.type!}",
+  "timestamp": "${.now?string('yyyy-MM-dd HH:mm:ss')}"
+}
+```
+
+Keep every FreeMarker expression on a single line. If the editor wraps a string across lines, the JSON will be invalid and the connection test will fail.
+
+### Adding the Trigger
+
+In the Triggered Experience:
+
+1. Click **Add trigger**.
+2. Choose **Custom**.
+3. Set **Event Name** to the exact `type` your app sends — for example, `starter:PRODUCT_INTERACTION`.
+4. Set **Event Identifier** to `Equals` with the same value.
+5. Save and set the experience to **Live**.
+
+### Testing the Triggered Experience End-to-End
+
+1. Start the Next.js app.
+2. Click **Send Custom Event** in the Event Demo Panel.
+3. The custom event reaches CDP, which fires the trigger.
+4. Personalize resolves the FreeMarker and sends the real JSON to your webhook.
+5. Check your Next.js terminal or Vercel function logs to inspect the payload.
+
+The Connection test shows literal template strings; the live trigger shows resolved values. That difference is expected.
+
+---
+
 ## Validation
 
 ### Verify CDP Event Collection
@@ -485,6 +606,13 @@ If the section stays as the skeleton, check:
 - The variant's JavaScript tab uses `replaceHTMLExact('.hero-section')`
 - Page targeting includes `/`
 
+### Verify Triggered Experience
+
+1. Start the Triggered Experience in Personalize
+2. Fire the custom event from the app
+3. Check the Next.js terminal logs or the Vercel function logs
+4. The webhook should log a parsed JSON payload with resolved values
+
 ---
 
 ## Troubleshooting
@@ -498,53 +626,48 @@ If the section stays as the skeleton, check:
 
 ### `Could not find browser with ref <uuid> for client <key>`
 
-This error means the browser ID and client key belong to **different CDP instances**. This happens when you have two CDP tenants and switched Context IDs between sessions.
-
-**Fix:** Clear the `sc_cid` and `sc_cid_personalize` cookies, restart the app, and reload. A new browser ID will be issued for the current Context ID.
+This error means the browser ID and client key belong to **different CDP instances**. Clear the `sc_cid` and `sc_cid_personalize` cookies, restart the app, and reload. A new browser ID will be issued for the current Context ID.
 
 ### `segmentMemberships` is undefined
 
-Segments must be created in Sitecore CDP (Batch segments) and are populated by the **nightly processing service at 00:00 UTC**. Newly created segments will not appear on guest profiles immediately.
-
-For testing without segments, use session-based logic (e.g., count VIEW events) in your programmable decision.
+Segments must be created in Sitecore CDP (Batch segments) and are populated by the **nightly processing service at 00:00 UTC**. For testing without segments, use session-based logic (e.g., count VIEW events).
 
 ### `Templating transformation failed`
 
 FreeMarker could not compile the API Response. Common causes:
 
-- Referencing a field that doesn't exist (`${guest.browserId}` is not valid)
+- Referencing a field that doesn't exist
 - Unbalanced `<#if>` / `</#if>` blocks
 - Missing closing quotes in JSON strings
 - **Unsaved variant** — click Save before Preview
 
-**Fix:** Click **Preview API** in the experience builder. It runs the FreeMarker template and shows you the exact error before you start the experience.
-
 ### `getDecisionModelResultNode(...) evaluated to null or missing`
-
-The decision model is not returning a value. Causes:
 
 | Cause | Fix |
 |---|---|
 | Experience is Paused or Draft | Click Start to make it Live |
-| Decision model variant is not in Production | Drag variant to Production in the Decision Model Build view |
+| Decision model variant is not in Production | Drag variant to Production |
 | Decision model is not connected to the experience | Attach it in the Decisioning section |
-| Wrong node name in `getDecisionModelResultNode()` | Use the **node name** (may contain spaces), not the output reference |
-| Wrong output access | Use `.outputs[0].CalculatePersona` (with brackets), not `.CalculatePersona` |
+| Wrong node name | Use the **node name**, not the output reference |
+| Wrong output access | Use `.outputs[0].CalculatePersona` |
 
 ### `[object HTMLElement] is not a valid selector`
 
-`replaceHTMLExact` expects a **CSS selector string**, not a DOM element. Use:
+`replaceHTMLExact` expects a **CSS selector string**, not a DOM element:
 
 ```javascript
 replaceHTMLExact('.hero-section');
 ```
 
-Not:
+### Webhook returns 400 during Connection test
 
-```javascript
-const target = document.querySelector('.hero-section');
-replaceHTMLExact(target); // wrong
-```
+The Connection test sends the request body **without resolving FreeMarker**. The body contains literal `${...}` syntax, which is not valid JSON.
+
+**Fix:** Change the webhook handler to use `request.text()` instead of `request.json()`, and wrap the parse in `try/catch`. Always return 200 so the test passes.
+
+### `SyntaxError: Expected property name or '}' in JSON at position N`
+
+This is the same issue — literal FreeMarker being parsed as JSON. See the fix above.
 
 ### Web Experience flickers
 
@@ -571,6 +694,9 @@ The flicker is caused by React re-rendering the target element. See [Web Experie
 | FreeMarker in API responses | `doc.sitecore.com/personalize/.../freemarker.html` |
 | Using dynamic decision model data | `doc.sitecore.com/personalize/.../use-dynamic-decision-model-data.html` |
 | Web Experience rendering APIs | `doc.sitecore.com/personalize/.../web-experience-apis.html` |
+| Triggered Experiences | `doc.sitecore.com/personalize/.../triggered-experiences.html` |
+| Connections and destinations | `doc.sitecore.com/personalize/.../connections.html` |
+| Triggers | `doc.sitecore.com/personalize/.../triggers.html` |
 | CDP identity resolution | `doc.sitecore.com/cdp/.../identity-resolution.html` |
 | CDP segments | `doc.sitecore.com/cdp/.../segments.html` |
 
@@ -578,13 +704,13 @@ The flicker is caused by React re-rendering the target element. See [Web Experie
 
 ## Production Considerations
 
-This starter kit is a **reference implementation**, not a production-ready application. Before deploying to production, consider:
+This starter kit is a **reference implementation**, not a production-ready application.
 
 ### Configuration
 
-- **Move away from `.env.local`.** Use your platform's secret manager (Vercel Environment Variables, AWS Secrets Manager, Azure Key Vault).
-- **Separate environments.** Use different Context IDs for development, staging, and production.
-- **Never commit `.env.local`.** Ensure it is in `.gitignore`.
+- Move away from `.env.local`. Use your platform's secret manager.
+- Separate environments. Use different Context IDs for development, staging, and production.
+- Never commit `.env.local`.
 
 ### Consent
 
@@ -600,13 +726,14 @@ This starter kit is a **reference implementation**, not a production-ready appli
 ### Error Handling
 
 - Wrap `sendViewEvent`, `sendIdentityEvent`, `sendCustomEvent`, and `runInteractiveExperience` in try/catch at the call site.
-- Log failures to your observability platform — do not let event collection failures break the user experience.
+- Do not let event collection failures break the user experience.
 
 ### Observability
 
-- Log CDP event failures with the `type` and browser ID for traceability.
+- Log CDP event failures with the `type` and browser ID.
 - Monitor Personalize flow execution latency.
 - Alert on repeated `No flow executed` responses.
+- Monitor webhook endpoints for 4xx and 5xx responses.
 
 ### Performance
 
@@ -616,22 +743,21 @@ This starter kit is a **reference implementation**, not a production-ready appli
 
 ### Security
 
-- The Context ID is public by design — it is not a secret.
+- The Context ID is public by design.
 - Never expose server-side Client Keys or API Tokens in `NEXT_PUBLIC_*` variables.
-- Verify the tenant boundary between CDP and Personalize (they are separate products).
+- **Webhook endpoints must verify incoming requests.** The test endpoint in this starter is unauthenticated for local development. In production, add a shared secret, IP allowlist, or signature verification.
 
 ### Sitecore Environment Configuration
 
-Some things can only be configured **inside Sitecore** — not in this repo:
+These are configured in Sitecore, not in this repo:
 
 - Identity rules (CDP → Settings → Identity Rules)
 - Segments (CDP → Batch segments)
 - Decision Models and Programmable Decisions (Personalize → Decisioning)
 - Interactive Experiences and their API Responses (Personalize → Experiences)
 - Web Experiences and their variants (Personalize → Experiences)
+- Triggered Experiences, Connections, and Triggers (Personalize → Experiences, Developer Center → Connections)
 - Goals for each experience
-
-The starter assumes these are configured in your tenant. If they are not, the code will still run, but decisioning will return default values.
 
 ---
 
