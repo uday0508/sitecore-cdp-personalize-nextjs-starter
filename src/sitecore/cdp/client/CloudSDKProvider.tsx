@@ -13,8 +13,8 @@ export function CloudSDKProvider({ children }: { children: React.ReactNode }) {
     initialized.current = true;
 
     CloudSDK({
-      sitecoreEdgeContextId: process.env.SITECORE_EDGE_CONTEXT_ID!,
-      siteName: process.env.SITECORE_SITE_NAME!,
+      sitecoreEdgeContextId: process.env.NEXT_PUBLIC_SITECORE_EDGE_CONTEXT_ID!,
+      siteName: process.env.NEXT_PUBLIC_SITECORE_SITE_NAME!,
       enableBrowserCookie: true,
     })
       .addEvents()
