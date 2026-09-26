@@ -4,6 +4,9 @@ import { useState } from 'react';
 import { sendViewEvent } from '@/src/sitecore/cdp/events/view';
 import { sendIdentityEvent } from '@/src/sitecore/cdp/events/identity';
 import { sendCustomEvent } from '@/src/sitecore/cdp/events/custom';
+import { sendFormEvent } from '@/src/sitecore/cdp/events/form';
+import { sendOrderCheckoutEvent } from '@/src/sitecore/cdp/events/order';
+import { queueEvent, processQueue } from '@/src/sitecore/cdp/events/queue';
 
 const eventContext = {
   channel: 'WEB',
@@ -59,9 +62,68 @@ export function EventDemoPanel() {
     }
   }
 
+  async function handleFormEvent() {
+    try {
+      await sendFormEvent({
+        formId: 'newsletter-signup',
+        interactionType: 'SUBMITTED',
+        componentInstanceId: 'demo-form-instance-001',
+      });
+      appendLog('FORM event sent');
+    } catch (error) {
+      appendLog(`FORM error: ${error instanceof Error ? error.message : error}`);
+    }
+  }
+
+  async function handleOrderEvent() {
+    try {
+      await sendOrderCheckoutEvent({
+        ...eventContext,
+        orderId: 'ORD-DEMO-001',
+        total: 249.99,
+        lineItems: [
+          {
+            productId: 'demo-001',
+            name: 'Demo Product',
+            quantity: 1,
+            price: 249.99,
+            currency: 'USD',
+          },
+        ],
+      });
+      appendLog('ORDER_CHECKOUT event sent');
+    } catch (error) {
+      appendLog(`Order error: ${error instanceof Error ? error.message : error}`);
+    }
+  }
+
+  async function handleQueuedEvent() {
+    try {
+      await queueEvent({
+        type: 'starter:QUEUED_ANALYTICS_PING',
+        ...eventContext,
+        extensionData: { source: 'queue-demo' },
+      });
+      appendLog('Event queued (not yet sent)');
+    } catch (error) {
+      appendLog(`Queue error: ${error instanceof Error ? error.message : error}`);
+    }
+  }
+
+  async function handleFlushQueue() {
+    try {
+      await processQueue();
+      appendLog('Queue flushed to CDP');
+    } catch (error) {
+      appendLog(`Flush error: ${error instanceof Error ? error.message : error}`);
+    }
+  }
+
   return (
     <section className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-      <h2 className="text-2xl font-semibold text-gray-900 mb-4">Event Collection Demo</h2>
+      <h2 className="text-2xl font-semibold text-gray-900 mb-4">
+        Event Collection Demo
+      </h2>
 
       <div className="flex flex-wrap gap-3 mb-4">
         <button
@@ -91,6 +153,34 @@ export function EventDemoPanel() {
           className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
         >
           Send Custom Event
+        </button>
+
+        <button
+          onClick={handleFormEvent}
+          className="px-4 py-2 bg-pink-600 text-white rounded-lg hover:bg-pink-700 transition-colors"
+        >
+          Send FORM event
+        </button>
+
+        <button
+          onClick={handleOrderEvent}
+          className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+        >
+          Send ORDER event
+        </button>
+
+        <button
+          onClick={handleQueuedEvent}
+          className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors"
+        >
+          Queue Event
+        </button>
+
+        <button
+          onClick={handleFlushQueue}
+          className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
+        >
+          Flush Queue
         </button>
       </div>
 
