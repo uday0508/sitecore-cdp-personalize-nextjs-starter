@@ -15,9 +15,12 @@ This starter kit is intentionally focused. It demonstrates the documented integr
 - [Setup](#setup)
 - [Environment Variables](#environment-variables)
 - [CDP Event Collection](#cdp-event-collection)
+- [Consent Management](#consent-management)
 - [Sitecore Personalize](#sitecore-personalize)
 - [Decision Model Integration](#decision-model-integration)
 - [Web Experience Integration](#web-experience-integration)
+- [Server-Side Personalization](#server-side-personalization)
+- [CDP REST API Integration](#cdp-rest-api-integration)
 - [Triggered Experience Integration](#triggered-experience-integration)
 - [Validation](#validation)
 - [Troubleshooting](#troubleshooting)
@@ -33,8 +36,13 @@ This starter kit is intentionally focused. It demonstrates the documented integr
 - **Cloud SDK initialization** with `events` and `personalize` packages
 - **VIEW event** using the documented `pageView()` function
 - **IDENTITY event** using the documented `identity()` function
-- **Custom events** using the documented `event()` function with reserved-name guard
+- **FORM event** using the dedicated `form(formId, interactionType, componentInstanceId)` function
+- **ORDER_CHECKOUT event** using the `event()` function with a reserved event type
+- **Custom events** with reserved-name guard for the `SC_` prefix
+- **Event queue** for batching non-critical events
 - **Extension data** attached to events (max 50 attributes)
+- **Session Traits** read from the guest profile via `guest.traits.session.<friendlyId>.value`
+- **CDP Guest REST API v2.1** with Basic Auth for server-side guest profile lookups
 
 ### Sitecore Personalize
 
@@ -44,25 +52,27 @@ This starter kit is intentionally focused. It demonstrates the documented integr
 - **FreeMarker API Response** with `getDecisionModelResultNode()` for surfacing decision output
 - **Web Experience** rendering via `webPersonalization: true` and the `hero-section` target
 - **Triggered Experience** webhook destination via a Next.js API route
+- **Server-side personalization** via the Personalize REST API and Next.js Middleware
 
 ### Next.js App Router
 
 - Client-side SDK initialization via a single `<CloudSDKProvider />`
+- Server-side personalization via Next.js Middleware
 - Clean separation between browser code and server code
 - Tailwind CSS v4 for UI
 - Strict TypeScript with path aliases
 - Flicker-free Web Experience target using a skeleton rendered once inside the target element
-- A test webhook endpoint for inspecting Triggered Experience payloads
+- Consent management with a banner and consent-gated event collection
 
 ---
 
 ## What This Starter Does NOT Do
 
 - **Does not fake decisioning.** Decision Models and Programmable Decisions execute inside Sitecore Personalize. This starter does not reimplement them in Next.js.
-- **Does not cover server-side event tracking.** The Cloud SDK supports it, but this starter is browser-only to keep the secret boundary simple.
-- **Does not manage consent.** Consent handling is your application's responsibility.
+- **Does not manage consent policy.** A consent mechanism is provided as a pattern, but the policy is yours.
 - **Does not use the Engage SDK.** The Cloud SDK requires SitecoreAI. If your organization does not have SitecoreAI, use the Engage SDK instead.
 - **Does not use the deprecated Boxever JavaScript library.** All Boxever Library templates in Personalize must be avoided.
+- **Does not include a Decision Table example.** It is documented but not shipped as runnable code, because the table is configured in Personalize UI.
 
 ---
 
@@ -73,7 +83,7 @@ This starter kit is intentionally focused. It demonstrates the documented integr
 | Browser                                                    |
 |                                                            |
 | 1. Cloud SDK initializes with Context ID + Site Name       |
-| 2. Events (VIEW / IDENTITY / custom) sent to CDP           |
+| 2. Events (VIEW / IDENTITY / FORM / ORDER / custom) to CDP |
 | 3. personalize() call sent to Sitecore Personalize         |
 | 4. Web Experiences injected into .hero-section             |
 |                                                            |
@@ -87,14 +97,14 @@ This starter kit is intentionally focused. It demonstrates the documented integr
     | * Identity      |<-----+ * Web Experience     |
     | * Events        |      | * Decision Model     |
     | * Segments      |      | * Programmable Dec.  |
-    +-----------------+      | * Triggered Exp.     |
-              ^              +----------+-----------+
-              |                         |
+    | * Session Traits|      | * Triggered Exp.     |
+    +-----------------+      +----------+-----------+
+              ^                         |
               |                         v
               |              +----------------------+
-              |              | Next.js Webhook      |
-              +--------------| /api/personalize/    |
-                             | webhook              |
+              |              | Next.js Middleware   |
+              |              | / Server Routes      |
+              +--------------| / Webhook Receiver   |
                              +----------------------+
 ```
 
@@ -102,10 +112,12 @@ This starter kit is intentionally focused. It demonstrates the documented integr
 
 | Layer | Runs Where | Responsibility |
 |---|---|---|
-| Cloud SDK | Browser | Event collection, cookies, `personalize()` calls, Web Experience injection |
-| Sitecore CDP | Sitecore Cloud | Guest profiles, identity resolution, segmentation |
+| Cloud SDK | Browser | Event collection, cookies, client-side `personalize()` calls, Web Experience injection |
+| Sitecore CDP | Sitecore Cloud | Guest profiles, identity resolution, segmentation, session traits |
 | Sitecore Personalize | Sitecore Cloud | Decisioning, Interactive Experiences, Web Experiences, Triggered Experiences |
-| Next.js | Browser + Server | UI rendering, integration boundaries, route handlers, webhook receiver |
+| Next.js Middleware | Server | Server-side personalization via REST API, cookie passthrough |
+| Next.js API Routes | Server | CDP REST API proxy, webhook receiver |
+| Next.js UI | Browser + Server | Rendering, integration boundaries |
 
 ---
 
@@ -149,18 +161,23 @@ Open `http://localhost:3000`.
 
 ## Environment Variables
 
-This starter requires only **two** environment variables. Both are browser-safe because the Cloud SDK does not use secrets for browser-side event collection.
+The starter uses both browser-safe and server-only variables. Anything without the `NEXT_PUBLIC_` prefix stays on the server.
 
 | Variable | Scope | Where to Find It |
 |---|---|---|
 | `NEXT_PUBLIC_SITECORE_EDGE_CONTEXT_ID` | Browser | Sitecore CDP → Settings → API Access → Context ID |
 | `NEXT_PUBLIC_SITECORE_SITE_NAME` | Browser | Sitecore CDP → Settings → Your configured site name |
+| `NEXT_PUBLIC_CDP_POINTOFSALE` | Browser | Sitecore CDP → Settings → Points of Sale → Name |
+| `SITECORE_CDP_CLIENT_KEY` | Server-only | Sitecore CDP → API Access → Client Key |
+| `SITECORE_CDP_API_TOKEN` | Server-only | Sitecore CDP → API Access → API Token |
 
-### Why No Client Key or Secret?
+### Why Two Sets of Credentials?
 
-The **Cloud SDK uses only the Context ID** for browser-side initialization. Client Keys and Secrets are used by the **Stream API** (direct HTTP integration) or **server-side APIs** — those are different integration paths.
+The **Cloud SDK** uses the Context ID for browser-side initialization. It does not use a Client Key or Secret.
 
-If you later add server-side personalization, you will need a Personalize Client Key, but that is out of scope for this starter.
+The **CDP Guest REST API** uses HTTP Basic Auth, where the username is the Client Key and the password is the API Token. These are server-only and must never be exposed to the browser.
+
+If you add server-side personalization, you will also need the Personalize `clientKey`, but the starter calls the Personalize Flow Execution REST API directly, so no additional SDK configuration is required.
 
 ---
 
@@ -181,7 +198,7 @@ await sendViewEvent({
 });
 ```
 
-The `page` value is used by Personalize goals to attribute page views. Keep it consistent.
+The `page` value is used by Personalize goals to attribute page views.
 
 ### IDENTITY Events
 
@@ -198,7 +215,7 @@ await sendIdentityEvent({
 });
 ```
 
-The `identifiers` array is **required** for identity resolution. The `provider` value must exactly match an identity provider configured in Sitecore CDP (Settings → Identity Rules).
+The `identifiers` array is **required**. The `provider` value must exactly match an identity provider configured in Sitecore CDP.
 
 ### Custom Events
 
@@ -215,33 +232,94 @@ await sendCustomEvent({
 });
 ```
 
-Custom event types must **not** start with `SC_` — that prefix is reserved by Sitecore CDP.
+Custom event types must not start with `SC_` — that prefix is reserved.
+
+### FORM Events
+
+```typescript
+import { sendFormEvent } from '@/src/sitecore/cdp/events/form';
+
+await sendFormEvent({
+  formId: 'newsletter-signup',
+  interactionType: 'SUBMITTED', // or 'VIEWED'
+  componentInstanceId: 'demo-form-instance-001',
+});
+```
+
+The `form()` function takes three positional arguments. It is not the same shape as `event()`.
+
+### ORDER Events
+
+```typescript
+import { sendOrderCheckoutEvent } from '@/src/sitecore/cdp/events/order';
+
+await sendOrderCheckoutEvent({
+  channel: 'WEB',
+  currency: 'USD',
+  language: 'EN',
+  page: 'checkout',
+  orderId: 'ORD-DEMO-001',
+  total: 249.99,
+  lineItems: [
+    { productId: 'demo-001', name: 'Demo Product', quantity: 1, price: 249.99, currency: 'USD' },
+  ],
+});
+```
+
+### Event Queue
+
+```typescript
+import { queueEvent, processQueue, discardQueue } from '@/src/sitecore/cdp/events/queue';
+
+// Queue without sending
+await queueEvent({ type: 'starter:ANALYTICS_PING', channel: 'WEB', /* ... */ });
+
+// Send all queued events in order
+await processQueue();
+
+// Discard without sending (e.g., consent withdrawn)
+await discardQueue();
+```
+
+Use the queue for non-critical events so they do not compete with primary events for network priority.
 
 ### Extension Data
 
-Extension data is attached as a property of the event data object:
+Attach it as a property of the event data object:
 
 ```typescript
 {
   type: 'starter:PRODUCT_INTERACTION',
   channel: 'WEB',
-  // ...
   extensionData: { productId: 'demo-001' },
 }
 ```
 
-Rules:
-- **Maximum 50 custom attributes** per event
-- Values must be flat (no nested objects)
-- Available in Personalize after the event is stored
+Rules: maximum 50 custom attributes, flat values only.
+
+---
+
+## Consent Management
+
+Consent is stored in a cookie and read before any event is sent. See `src/sitecore/consent/index.ts`.
+
+```typescript
+import { getConsent, setConsent, hasAnalyticsConsent } from '@/src/sitecore/consent';
+
+if (hasAnalyticsConsent()) {
+  await sendViewEvent(eventContext);
+}
+```
+
+The `<ConsentBanner />` component in `src/components/ConsentBanner.tsx` is rendered in the root layout. It lets visitors accept, reject, or customize consent.
+
+This is a **pattern demonstration**, not a full CMP. In production, replace it with your organization's consent management platform and sync the consent state to CDP as a guest data extension.
 
 ---
 
 ## Sitecore Personalize
 
 ### Interactive Experience
-
-This starter calls an Interactive Experience via the browser-side `personalize()` function:
 
 ```typescript
 import { runInteractiveExperience } from '@/src/sitecore/personalize/interactive';
@@ -250,59 +328,41 @@ const response = await runInteractiveExperience({
   friendlyId: 'demo_interactive',
   channel: 'WEB',
   currency: 'USD',
+  pointOfSale: 'honda-mideast',
 });
 ```
 
-The `friendlyId` is found in the Interactive Experience UI under **Details → Friendly ID**.
+The `friendlyId` is found in the Interactive Experience UI under **Details → Friendly ID**. The `pointOfSale` must match a Point of Sale configured in your CDP tenant.
 
 ### Web Experience
 
-Web Experiences are enabled automatically via `webPersonalization: true` during SDK initialization. You do not call a function for them.
-
-To rerun web personalizations after a client-side route change in the Next.js App Router:
+Web Experiences are enabled via `webPersonalization: true` during SDK initialization. They run automatically. To rerun after route changes:
 
 ```typescript
 window.scCloudSDK.personalize.triggerExperiences();
 ```
 
-**Note:** `triggerExperiences` is not exported from `@sitecore-cloudsdk/personalize`. It is injected onto `window.scCloudSDK.personalize` after the Cloud SDK initializes. Access it via `window`, not via import.
+The `triggerExperiences` function is not exported from `@sitecore-cloudsdk/personalize`. It is injected onto `window.scCloudSDK.personalize` after the SDK initializes.
 
-### Triggered Experience
-
-Triggered Experiences send personalized content to **external destinations** (ESP, SMS, Push provider) via HTTP webhooks. They are configured entirely in Sitecore Personalize — no rendering happens in the browser.
-
-The flow:
-
-1. Create a **Connection** in Personalize pointing to an external endpoint.
-2. Create a **Triggered Experience** with the webhook body composed via FreeMarker.
-3. Add a **Trigger** — a Standard event (Guest Created, Order Created, Session Closed) or a Custom event that matches a `type` you send from your application.
-4. Set the experience to **Live**.
-
-Your Next.js application does not render the Triggered Experience. It only fires the custom event that triggers it. The payload is delivered to the external endpoint.
-
-### Web Experience vs Interactive Experience vs Triggered Experience
+### Web vs Interactive vs Triggered
 
 | Feature | Web Experience | Interactive Experience | Triggered Experience |
 |---|---|---|---|
 | Configured by | Marketers | Developers | Marketers / Developers |
-| Delivery | Injected `<script>` + DOM replacement | JSON API response | HTTP webhook to external destination |
-| Rendering | Client-side DOM injection | Your React components | External system |
-| Flicker risk | Yes — architectural | No | Not applicable |
-| Best for | Marketing overlays, banners, popups | Structured personalization, primary content | Email, SMS, push, external systems |
+| Delivery | Injected `<script>` + DOM | JSON API response | HTTP webhook |
+| Rendering | Client-side DOM | Your React components | External system |
+| Flicker risk | Yes | No | Not applicable |
+| Best for | Overlays, banners | Primary content | Email, SMS, push |
 
 ---
 
 ## Decision Model Integration
 
-**CDP collects events → Personalize evaluates guest data → Decision Model returns a value → API Response surfaces it as JSON → Next.js renders based on the result.**
+**CDP collects events → Personalize evaluates guest data → Decision Model returns a value → API Response surfaces it as JSON → Next.js renders.**
 
-### Step 1: Create a Decision Model in Personalize
+### Step 1: Create a Programmable Decision
 
-In Sitecore Personalize → Decisioning → **Create Decision Model**.
-
-Add a **Programmable Decision** with an output reference (e.g., `CalculatePersona`). The output reference **must not contain spaces**.
-
-Example programmable decision:
+In Sitecore Personalize → Decisioning → **Create Decision Model**. Add a Programmable Decision with an output reference (no spaces).
 
 ```javascript
 (function () {
@@ -311,32 +371,27 @@ Example programmable decision:
         var session = guest.sessions[0];
         if (session.events) {
             for (var j = 0; j < session.events.length; j++) {
-                if (session.events[j].type === 'VIEW') {
-                    viewCount++;
-                }
+                if (session.events[j].type === 'VIEW') viewCount++;
             }
         }
     }
-
     if (viewCount >= 5) return 'VIP';
     if (viewCount >= 2) return 'Engaged';
     return 'New Visitor';
 })();
 ```
 
-### Step 2: Publish the Variant to Production
+### Step 2: Publish to Production
 
-In the Decision Model's **Build** view, drag the variant from **Draft** to the **Production** column. Only Production variants execute at runtime.
+In the Decision Model's **Build** view, drag the variant from **Draft** to **Production**. Only Production variants execute.
 
-> Draft, Test, and Paused variants do not execute. This is the single most common cause of `null` decision outputs.
+### Step 3: Attach to the Experience
 
-### Step 3: Connect the Decision Model to the Experience
-
-In your Interactive Experience, scroll to **Decisioning** and attach the Decision Model. Confirm the green checkmark appears.
+In the Interactive Experience, scroll to **Decisioning** and attach the model.
 
 ### Step 4: Write the API Response
 
-Use the verified FreeMarker pattern. The function `getDecisionModelResultNode()` takes the **node name**, and the output value is accessed via `.outputs[0].<OutputReference>`:
+The verified FreeMarker pattern:
 
 ```freemarker
 <#assign personaNode = getDecisionModelResultNode("Calculate Persona")>
@@ -353,18 +408,19 @@ Use the verified FreeMarker pattern. The function `getDecisionModelResultNode()`
 
 **Key rules:**
 
-- `getDecisionModelResultNode("...")` uses the **node name** (may contain spaces)
-- The output is accessed via `.outputs[0].CalculatePersona` using the **output reference** (no spaces)
-- Always wrap the node access in `<#if (node)??>` to avoid null errors
-- Use `<#if>` blocks instead of nested ternaries with quotes
+- `getDecisionModelResultNode("...")` uses the node **name** (may contain spaces)
+- The output is accessed via `.outputs[0].<OutputReference>` using the output reference (no spaces)
+- Wrap the node access in `<#if (node)??>` to avoid null errors
+- Use `<#if>` blocks, not nested ternaries with quotes
+- The correct closing tag is `</#if>` — slash before hash
 
-### Step 5: Save the Variant Before Previewing
+### Step 5: Save Before Previewing
 
-The API Response editor has its own save action. If the yellow banner says **"Your variant has changes, make sure to save before testing"**, Preview API will test the **saved** version, not the version you typed. Click **Save** first, then Preview.
+If the yellow banner says **"Your variant has changes, make sure to save before testing"**, Preview will test the saved version. Click **Save** first.
 
-### Step 6: Make the Experience Live
+### Step 6: Start the Experience
 
-Click **Start** in the top right. The status must be **LIVE**. Paused or Draft experiences will not execute.
+Click **Start**. The status must be **LIVE**.
 
 ---
 
@@ -372,13 +428,11 @@ Click **Start** in the top right. The status must be **LIVE**. Paused or Draft e
 
 ### The Flicker Problem
 
-Web Experiences inject content **after** the browser has painted the page. In a Next.js App Router app, this causes a visible swap: default content → personalized content.
-
-The cause is that React re-renders the target element, overwriting whatever Personalize injected.
+Web Experiences inject content **after** the browser paints the page. In a React app, this causes a visible swap from default to personalized content.
 
 ### The Flicker-Free Pattern
 
-Render the skeleton **once, inside** the target element. Do not use `useState`, `useEffect`, or conditional rendering on this component. React mounts it once and never touches it again. Personalize replaces the inner content via `replaceHTMLExact`.
+Render the skeleton **once, inside** the target element. Do not use `useState`, `useEffect`, or conditional rendering on this component. React mounts it once and never touches it again.
 
 ### `src/components/HeroSection.tsx`
 
@@ -399,109 +453,138 @@ export function HeroSection() {
 }
 ```
 
-### Why This Works
-
-- **No state, no `useEffect`, no conditional render.** React cannot wipe Personalize's injected content because React never touches the element again after mount.
-- **The skeleton lives inside `.hero-section`.** Personalize replaces the skeleton in place.
-- **No default text is ever rendered.** The user sees the skeleton, then the personalized content. There is no third state.
-- **If Personalize does not run**, the skeleton remains. That is a deliberate choice — visible feedback that the section is a personalization target.
-
 ### Personalize Variant Configuration
 
 **HTML tab:**
-
 ```html
 <section class="hero-section bg-yellow-50 rounded-xl border border-yellow-200 p-8 mb-8">
-  <h2 class="text-3xl font-bold text-yellow-800 mb-2">
-    Welcome, {{persona}}!
-  </h2>
+  <h2 class="text-3xl font-bold text-yellow-800 mb-2">Welcome, {{persona}}!</h2>
   <p class="text-yellow-700">{{message}}</p>
 </section>
 ```
 
 **JavaScript tab:**
-
 ```javascript
 replaceHTMLExact('.hero-section');
 ```
 
-Use the **selector string**, not a DOM element. The method signature is `replaceHTMLExact(selector, htmlContent?)` — the first argument must be a string.
+Use the **selector string**, not a DOM element.
 
-**API tab:**
+---
 
-```freemarker
-<#assign personaNode = getDecisionModelResultNode("Calculate Persona")>
-{
-  <#if (personaNode)??>
-  "persona": "${personaNode.outputs[0].CalculatePersona}",
-  "message": "<#if personaNode.outputs[0].CalculatePersona == "VIP">Welcome back, valued customer!<#elseif personaNode.outputs[0].CalculatePersona == "Engaged">Great to see you again!<#else>Welcome to our site!</#if>"
-  <#else>
-  "persona": "New Visitor",
-  "message": "Welcome to our site!"
-  </#if>
+## Server-Side Personalization
+
+Server-side personalization resolves the decision **before** the page renders, so there is no flicker and no client-side fetch.
+
+### Approach: Next.js Middleware + Personalize REST API
+
+The Cloud SDK's server-side `personalize()` function does not accept a configurable `pointOfSale` in the `ServerSettings` type, and it strips the value from the request. The reliable path is to call the Personalize Flow Execution REST API directly.
+
+### `middleware.ts`
+
+```typescript
+import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
+
+export async function middleware(request: NextRequest) {
+  if (!request.nextUrl.pathname.startsWith('/server-personalization')) {
+    return NextResponse.next();
+  }
+
+  if (request.headers.get('x-middleware-prefetch') === '1') {
+    return NextResponse.next();
+  }
+
+  const response = NextResponse.next();
+  const browserId = request.cookies.get('sc_cid')?.value;
+
+  if (!browserId) {
+    response.headers.set('x-personalize-result', JSON.stringify({ error: 'no-browser-id' }));
+    return response;
+  }
+
+  const payload = {
+    clientKey: process.env.SITECORE_CDP_CLIENT_KEY!,
+    channel: 'WEB',
+    language: 'en',
+    currencyCode: 'USD',
+    pointOfSale: process.env.NEXT_PUBLIC_CDP_POINTOFSALE!,
+    browserId,
+    friendlyId: 'demo_interactive',
+  };
+
+  try {
+    const personalizeResponse = await fetch('https://api.boxever.com/v2/callFlows', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const result = await personalizeResponse.json();
+    response.headers.set('x-personalize-result', JSON.stringify(result));
+  } catch (error) {
+    response.headers.set('x-personalize-result', JSON.stringify({ error: 'personalization-failed' }));
+  }
+
+  return response;
 }
+
+export const config = {
+  matcher: ['/server-personalization'],
+};
 ```
 
-### Rerunning Web Personalizations on Route Changes
+The page reads the result from the response header. See `app/server-personalization/page.tsx`.
 
-Add `src/components/WebPersonalizationTrigger.tsx`:
+---
 
-```tsx
-'use client';
+## CDP REST API Integration
 
-import { useEffect } from 'react';
-import { usePathname } from 'next/navigation';
+Server-side guest profile lookup via the CDP Guest REST API v2.1.
 
-export function WebPersonalizationTrigger() {
-  const pathname = usePathname();
+### Authentication
 
-  useEffect(() => {
-    if (
-      typeof window !== 'undefined' &&
-      window.scCloudSDK?.personalize?.triggerExperiences
-    ) {
-      window.scCloudSDK.personalize.triggerExperiences();
-    }
-  }, [pathname]);
+CDP uses HTTP Basic Auth:
+- Username = `SITECORE_CDP_CLIENT_KEY`
+- Password = `SITECORE_CDP_API_TOKEN`
 
-  return null;
-}
-```
+### Browser ID → Guest Ref → Guest Profile
 
-Include it in `app/layout.tsx` inside `<CloudSDKProvider>`.
+The Guest REST API does **not** accept `browserRef` as a query parameter. Two steps are required:
+
+1. Look up the guest reference via `GET /v2/guestContexts?browserRef=<id>`
+2. Retrieve the full profile via `GET /v2.1/guests/<ref>`
+
+See `src/sitecore/cdp/rest/client.ts` for the implementation.
+
+### API Route
+
+`app/api/cdp/guest/route.ts` wraps the client and accepts `?browserId=<value>`. The UI page at `/guest-profile` reads the `sc_cid` cookie and calls the route.
 
 ---
 
 ## Triggered Experience Integration
 
-Triggered Experiences are configured entirely in Sitecore Personalize. The only code contribution from your Next.js application is:
+Triggered Experiences send personalized content to external destinations via HTTP webhooks. The only code contribution from Next.js is:
 
-1. A **custom event** that fires the trigger (already implemented in `src/sitecore/cdp/events/custom.ts`).
-2. A **webhook receiver** endpoint to inspect the outgoing payload during development.
+1. A **custom event** that fires the trigger (already in `src/sitecore/cdp/events/custom.ts`).
+2. A **webhook receiver** to inspect the outgoing payload.
 
 ### The Test Webhook Endpoint
 
-Add `app/api/personalize/webhook/route.ts`:
+`app/api/personalize/webhook/route.ts`:
 
 ```typescript
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(request: NextRequest) {
   const raw = await request.text();
-
-  console.log('=== Personalize Webhook Received ===');
-  console.log('Content-Type:', request.headers.get('content-type'));
   console.log('Raw body:', raw);
-  console.log('=====================================');
 
   let parsed: unknown = null;
   try {
     parsed = JSON.parse(raw);
-    console.log('Parsed JSON:', JSON.stringify(parsed, null, 2));
   } catch {
-    // FreeMarker was not resolved — this is expected during
-    // the Connection test in Sitecore Personalize.
-    console.log('Body is not JSON (expected during Connection test).');
+    // Connection test sends literal FreeMarker — not valid JSON
   }
 
   return NextResponse.json({ status: 'received' }, { status: 200 });
@@ -510,18 +593,7 @@ export async function POST(request: NextRequest) {
 
 ### Why the Endpoint Accepts Non-JSON
 
-When you test the **Connection** in the Sitecore Personalize editor, the request body is sent **without FreeMarker resolution**. The body contains literal template syntax like `${guest.ref}` which is not valid JSON.
-
-`request.json()` would throw and cause the test to fail. Using `request.text()` and attempting to parse inside a `try/catch` allows the connection test to succeed while still logging the resolved payload when a real experience runs.
-
-### Connecting the Webhook to Personalize
-
-1. **Deploy the Next.js app** so the endpoint is publicly reachable (Vercel, or `npx localtunnel --port 3000` for local).
-2. In Sitecore Personalize, go to **Developer Center > Connections** and create a **Destination**.
-3. Set **Request URL** to your endpoint (e.g., `https://your-app.vercel.app/api/personalize/webhook`).
-4. Set **Content-Type** to `application/json`.
-5. In the **Request** body, compose the FreeMarker payload (see below).
-6. Click **Test Request** — the connection test sends the raw template and expects a 2xx response.
+The **Connection test** in Sitecore Personalize sends the request body **without resolving FreeMarker**. The body contains literal `${guest.ref}` syntax. Using `request.text()` instead of `request.json()` lets the test pass and still logs the resolved payload when a real experience runs.
 
 ### Sample Webhook Payload
 
@@ -529,7 +601,6 @@ When you test the **Connection** in the Sitecore Personalize editor, the request
 {
   "guestId": "${guest.ref}",
   "email": "${guest.email!}",
-  "firstName": "${guest.firstName!}",
   "persona": "${getDecisionModelResultNode("Calculate Persona").outputs[0].CalculatePersona!\"Visitor\"}",
   "message": "<#if getDecisionModelResultNode("Calculate Persona").outputs[0].CalculatePersona == "VIP">Welcome back, valued customer!<#else>Welcome to our site!</#if>",
   "eventType": "${event.type!}",
@@ -537,27 +608,16 @@ When you test the **Connection** in the Sitecore Personalize editor, the request
 }
 ```
 
-Keep every FreeMarker expression on a single line. If the editor wraps a string across lines, the JSON will be invalid and the connection test will fail.
+Keep every FreeMarker expression on one line. Do not let the editor wrap a string across lines.
 
-### Adding the Trigger
+### The Connection vs the Webhook Composer
 
-In the Triggered Experience:
+| Where | What Goes There |
+|---|---|
+| **Connection** | Only HTTP plumbing: URL, method, headers, auth. No personalized payload. |
+| **Triggered Experience Webhook Composer** | The full FreeMarker payload with `${guest.ref}`, `getDecisionModelResultNode(...)`, etc. |
 
-1. Click **Add trigger**.
-2. Choose **Custom**.
-3. Set **Event Name** to the exact `type` your app sends — for example, `starter:PRODUCT_INTERACTION`.
-4. Set **Event Identifier** to `Equals` with the same value.
-5. Save and set the experience to **Live**.
-
-### Testing the Triggered Experience End-to-End
-
-1. Start the Next.js app.
-2. Click **Send Custom Event** in the Event Demo Panel.
-3. The custom event reaches CDP, which fires the trigger.
-4. Personalize resolves the FreeMarker and sends the real JSON to your webhook.
-5. Check your Next.js terminal or Vercel function logs to inspect the payload.
-
-The Connection test shows literal template strings; the live trigger shows resolved values. That difference is expected.
+The Connection test only verifies the HTTP config. It does not run the decision model.
 
 ---
 
@@ -565,53 +625,46 @@ The Connection test shows literal template strings; the live trigger shows resol
 
 ### Verify CDP Event Collection
 
-1. Open DevTools → **Network** tab
+1. Open DevTools → **Network**
 2. Filter for `edge-platform.sitecorecloud.io/events`
 3. Click a button in the Event Demo Panel
 4. You should see a `POST` request with status `200 OK`
 
-**Verify the browser ID cookie:**
-
-Open DevTools → **Application** → **Cookies**:
+**Cookies to check:**
 
 | Cookie | Purpose |
 |---|---|
 | `sc_cid` | Browser ID — used by CDP |
 | `sc_cid_personalize` | Personalize guest ID |
 
-If both cookies exist, the Cloud SDK initialized successfully.
-
-**Verify in CDP:**
-
-Open Sitecore CDP → Guests → search by **Browser ID** (the value of `sc_cid`). The guest profile should show the events you sent.
-
 ### Verify Personalize Decisioning
 
 1. Navigate to `/personalization`
 2. Click **Run Experience**
-3. You should see the persona badge and personalized message
-
-If you see `{"message":"No flow executed"}`, the experience is not Live.
-If you see `{"message":"Templating transformation failed"}`, there is a FreeMarker error.
-If `persona` is null, the decision model variant is not in Production.
+3. The persona badge and message should appear
 
 ### Verify Web Experience
 
 1. Start the Web Experience in Personalize
-2. Open `http://localhost:3000`
-3. The `.hero-section` should show the skeleton, then the personalized content
+2. Open the home page
+3. `.hero-section` should show the skeleton, then the personalized content
 
-If the section stays as the skeleton, check:
-- The Web Experience is **Live**
-- The variant's JavaScript tab uses `replaceHTMLExact('.hero-section')`
-- Page targeting includes `/`
+### Verify Server-Side Personalization
+
+1. Navigate to `/server-personalization`
+2. The result is present on first paint — view source to confirm
+
+### Verify CDP REST API
+
+1. Navigate to `/guest-profile`
+2. Click **Load Guest Profile**
+3. The guest type, email, and segments should appear
 
 ### Verify Triggered Experience
 
 1. Start the Triggered Experience in Personalize
 2. Fire the custom event from the app
-3. Check the Next.js terminal logs or the Vercel function logs
-4. The webhook should log a parsed JSON payload with resolved values
+3. Check Vercel function logs for the parsed payload
 
 ---
 
@@ -619,25 +672,54 @@ If the section stays as the skeleton, check:
 
 ### Event not appearing in CDP
 
-- Verify `NEXT_PUBLIC_SITECORE_EDGE_CONTEXT_ID` matches the CDP instance you are checking
+- Verify `NEXT_PUBLIC_SITECORE_EDGE_CONTEXT_ID` matches the CDP instance
 - Check the Network tab for failed requests
-- Confirm the `sc_cid` cookie exists in DevTools
-- Ensure the SDK initialized (no console errors from `CloudSDKProvider`)
+- Confirm the `sc_cid` cookie exists
+- Ensure the SDK initialized (no console errors)
 
 ### `Could not find browser with ref <uuid> for client <key>`
 
-This error means the browser ID and client key belong to **different CDP instances**. Clear the `sc_cid` and `sc_cid_personalize` cookies, restart the app, and reload. A new browser ID will be issued for the current Context ID.
+Browser ID and client key belong to **different CDP instances**. Clear `sc_cid` and `sc_cid_personalize` cookies, restart the app, and reload.
+
+### `The request contains invalid point of sale ""`
+
+The `pointOfSale` is missing from the `personalizeData` object. Add it:
+
+```typescript
+await runInteractiveExperience({
+  friendlyId: 'demo_interactive',
+  channel: 'WEB',
+  currency: 'USD',
+  pointOfSale: process.env.NEXT_PUBLIC_CDP_POINTOFSALE || 'honda-mideast',
+});
+```
+
+Valid values are configured in your CDP tenant. Check the error message for the list.
 
 ### `segmentMemberships` is undefined
 
-Segments must be created in Sitecore CDP (Batch segments) and are populated by the **nightly processing service at 00:00 UTC**. For testing without segments, use session-based logic (e.g., count VIEW events).
+Segments populate via the **nightly processing service at 00:00 UTC**. For testing without segments, use session-based logic.
+
+### Session Traits not showing on guest profile
+
+Three conditions must all be met:
+
+1. Guest is `customer`, not `visitor`
+2. Session status is `Closed` — traits run at session end
+3. Session trait is `Active`, not Draft
+
+Check the **Activity tab** of the session trait in CDP to see execution status.
+
+### `traits` not showing in Decision Table input picker
+
+The picker only shows attributes that **exist on the current guest context**. The `traits.session` node appears only after a session trait has been calculated and stored. Until then, use a Script input that reads `guest.traits.session.<friendlyId>.value` with a fallback.
 
 ### `Templating transformation failed`
 
 FreeMarker could not compile the API Response. Common causes:
 
-- Referencing a field that doesn't exist
-- Unbalanced `<#if>` / `</#if>` blocks
+- Referencing a field that does not exist
+- **Unclosed `#if`** — the correct closing tag is `</#if>` (slash before hash)
 - Missing closing quotes in JSON strings
 - **Unsaved variant** — click Save before Preview
 
@@ -645,15 +727,16 @@ FreeMarker could not compile the API Response. Common causes:
 
 | Cause | Fix |
 |---|---|
-| Experience is Paused or Draft | Click Start to make it Live |
+| Experience is Paused or Draft | Click Start |
 | Decision model variant is not in Production | Drag variant to Production |
-| Decision model is not connected to the experience | Attach it in the Decisioning section |
+| Decision model not attached | Attach in Decisioning section |
 | Wrong node name | Use the **node name**, not the output reference |
 | Wrong output access | Use `.outputs[0].CalculatePersona` |
+| Wrong session trait case | Use the **friendlyId** (lowercase), not the display name |
 
 ### `[object HTMLElement] is not a valid selector`
 
-`replaceHTMLExact` expects a **CSS selector string**, not a DOM element:
+`replaceHTMLExact` expects a CSS selector string, not a DOM element:
 
 ```javascript
 replaceHTMLExact('.hero-section');
@@ -661,17 +744,15 @@ replaceHTMLExact('.hero-section');
 
 ### Webhook returns 400 during Connection test
 
-The Connection test sends the request body **without resolving FreeMarker**. The body contains literal `${...}` syntax, which is not valid JSON.
-
-**Fix:** Change the webhook handler to use `request.text()` instead of `request.json()`, and wrap the parse in `try/catch`. Always return 200 so the test passes.
+The Connection test sends the body without resolving FreeMarker. Use `request.text()` instead of `request.json()`, and always return 200.
 
 ### `SyntaxError: Expected property name or '}' in JSON at position N`
 
-This is the same issue — literal FreeMarker being parsed as JSON. See the fix above.
+Same cause as above. See the webhook fix.
 
 ### Web Experience flickers
 
-The flicker is caused by React re-rendering the target element. See [Web Experience Integration](#web-experience-integration) for the flicker-free pattern: render the skeleton inside the target element once, and never re-render that component.
+The skeleton must be rendered **inside** the target element, and the component must not re-render. See [Web Experience Integration](#web-experience-integration).
 
 ---
 
@@ -696,7 +777,9 @@ The flicker is caused by React re-rendering the target element. See [Web Experie
 | Web Experience rendering APIs | `doc.sitecore.com/personalize/.../web-experience-apis.html` |
 | Triggered Experiences | `doc.sitecore.com/personalize/.../triggered-experiences.html` |
 | Connections and destinations | `doc.sitecore.com/personalize/.../connections.html` |
-| Triggers | `doc.sitecore.com/personalize/.../triggers.html` |
+| Session traits | `doc.sitecore.com/personalize/.../defining-storing-and-accessing-session-traits.html` |
+| Decision tables | `doc.sitecore.com/personalize/.../decision-tables.html` |
+| CDP Guest REST API | `doc.sitecore.com/cdp/.../guest-api.html` |
 | CDP identity resolution | `doc.sitecore.com/cdp/.../identity-resolution.html` |
 | CDP segments | `doc.sitecore.com/cdp/.../segments.html` |
 
@@ -704,59 +787,61 @@ The flicker is caused by React re-rendering the target element. See [Web Experie
 
 ## Production Considerations
 
-This starter kit is a **reference implementation**, not a production-ready application.
+This is a **reference implementation**, not a production-ready application.
 
 ### Configuration
 
-- Move away from `.env.local`. Use your platform's secret manager.
-- Separate environments. Use different Context IDs for development, staging, and production.
+- Move away from `.env.local`. Use a platform secret manager.
+- Separate environments. Use different Context IDs per environment.
 - Never commit `.env.local`.
 
 ### Consent
 
-- Consent management is **not** included. Implement it in your application layer.
-- Coordinate with your CDP administrator to configure consent flags in guest profiles.
+- The consent banner is a pattern. Replace it with your organization's CMP.
+- Sync consent state to CDP as a guest data extension.
 
 ### Identity Strategy
 
-- Decide when to fire IDENTITY events (login, checkout, newsletter signup).
-- Map your internal user IDs to CDP `provider` values.
-- Test identity resolution against the CDP sandbox before production.
+- Decide when IDENTITY events fire (login, checkout, signup).
+- Map internal user IDs to CDP `provider` values.
+- Test identity resolution against the sandbox before production.
 
 ### Error Handling
 
-- Wrap `sendViewEvent`, `sendIdentityEvent`, `sendCustomEvent`, and `runInteractiveExperience` in try/catch at the call site.
-- Do not let event collection failures break the user experience.
+- Wrap event functions and REST calls in `try/catch` at the call site.
+- Do not let CDP failures break the user experience.
 
 ### Observability
 
-- Log CDP event failures with the `type` and browser ID.
+- Log CDP event failures with `type` and browser ID.
 - Monitor Personalize flow execution latency.
 - Alert on repeated `No flow executed` responses.
-- Monitor webhook endpoints for 4xx and 5xx responses.
+- Monitor webhook endpoints for 4xx and 5xx.
 
 ### Performance
 
 - The Cloud SDK loads asynchronously. Ensure critical UI renders independently.
-- Web Experiences cause a flicker because the DOM is mutated after paint. Use the flicker-free skeleton pattern documented above.
+- Web Experiences flicker because the DOM is mutated after paint. Use the skeleton pattern documented above.
 - Interactive Experiences do not flicker — prefer them for primary content.
+- Server-side personalization via middleware adds latency to every matched route. Scope the matcher carefully.
 
 ### Security
 
 - The Context ID is public by design.
-- Never expose server-side Client Keys or API Tokens in `NEXT_PUBLIC_*` variables.
-- **Webhook endpoints must verify incoming requests.** The test endpoint in this starter is unauthenticated for local development. In production, add a shared secret, IP allowlist, or signature verification.
+- Never expose `SITECORE_CDP_CLIENT_KEY` or `SITECORE_CDP_API_TOKEN` in `NEXT_PUBLIC_*` variables.
+- Webhook endpoints must verify incoming requests in production. The test endpoint in this starter is unauthenticated for local development.
 
 ### Sitecore Environment Configuration
 
-These are configured in Sitecore, not in this repo:
+Configured in Sitecore, not in this repo:
 
 - Identity rules (CDP → Settings → Identity Rules)
 - Segments (CDP → Batch segments)
-- Decision Models and Programmable Decisions (Personalize → Decisioning)
+- Session Traits (CDP → Developer center → Session traits)
+- Decision Models, Programmable Decisions, Decision Tables (Personalize → Decisioning)
 - Interactive Experiences and their API Responses (Personalize → Experiences)
 - Web Experiences and their variants (Personalize → Experiences)
-- Triggered Experiences, Connections, and Triggers (Personalize → Experiences, Developer Center → Connections)
+- Triggered Experiences, Connections, Triggers (Personalize → Experiences, Developer Center → Connections)
 - Goals for each experience
 
 ---
