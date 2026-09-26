@@ -7,6 +7,7 @@ import { sendCustomEvent } from '@/src/sitecore/cdp/events/custom';
 import { sendFormEvent } from '@/src/sitecore/cdp/events/form';
 import { sendOrderCheckoutEvent } from '@/src/sitecore/cdp/events/order';
 import { queueEvent, processQueue } from '@/src/sitecore/cdp/events/queue';
+import { hasAnalyticsConsent } from '@/src/sitecore/consent';
 
 const eventContext = {
   channel: 'WEB',
@@ -24,6 +25,10 @@ export function EventDemoPanel() {
   }
 
   async function handleViewEvent() {
+    if (!hasAnalyticsConsent()) {
+      appendLog('VIEW blocked — analytics consent not granted');
+      return;
+    }
     try {
       await sendViewEvent(eventContext);
       appendLog('VIEW event sent');
@@ -33,6 +38,10 @@ export function EventDemoPanel() {
   }
 
   async function handleIdentityEvent() {
+    if (!hasAnalyticsConsent()) {
+      appendLog('IDENTITY blocked — analytics consent not granted');
+      return;
+    }
     if (!email) {
       appendLog('Enter an email first');
       return;
@@ -50,6 +59,10 @@ export function EventDemoPanel() {
   }
 
   async function handleCustomEvent() {
+    if (!hasAnalyticsConsent()) {
+      appendLog('Custom event blocked — analytics consent not granted');
+      return;
+    }
     try {
       await sendCustomEvent({
         type: 'starter:PRODUCT_INTERACTION',
@@ -63,6 +76,10 @@ export function EventDemoPanel() {
   }
 
   async function handleFormEvent() {
+    if (!hasAnalyticsConsent()) {
+      appendLog('FORM blocked — analytics consent not granted');
+      return;
+    }
     try {
       await sendFormEvent({
         formId: 'newsletter-signup',
@@ -76,6 +93,10 @@ export function EventDemoPanel() {
   }
 
   async function handleOrderEvent() {
+    if (!hasAnalyticsConsent()) {
+      appendLog('ORDER blocked — analytics consent not granted');
+      return;
+    }
     try {
       await sendOrderCheckoutEvent({
         ...eventContext,
@@ -98,6 +119,10 @@ export function EventDemoPanel() {
   }
 
   async function handleQueuedEvent() {
+    if (!hasAnalyticsConsent()) {
+      appendLog('Queue blocked — analytics consent not granted');
+      return;
+    }
     try {
       await queueEvent({
         type: 'starter:QUEUED_ANALYTICS_PING',
@@ -111,6 +136,10 @@ export function EventDemoPanel() {
   }
 
   async function handleFlushQueue() {
+    if (!hasAnalyticsConsent()) {
+      appendLog('Flush blocked — analytics consent not granted');
+      return;
+    }
     try {
       await processQueue();
       appendLog('Queue flushed to CDP');
@@ -119,82 +148,85 @@ export function EventDemoPanel() {
     }
   }
 
+  const groups = [
+    {
+      label: 'Standard events',
+      buttons: [
+        { label: 'VIEW', onClick: handleViewEvent, color: 'bg-blue-600 hover:bg-blue-700' },
+        { label: 'Custom', onClick: handleCustomEvent, color: 'bg-purple-600 hover:bg-purple-700' },
+        { label: 'FORM', onClick: handleFormEvent, color: 'bg-pink-600 hover:bg-pink-700' },
+        { label: 'ORDER', onClick: handleOrderEvent, color: 'bg-indigo-600 hover:bg-indigo-700' },
+      ],
+    },
+    {
+      label: 'Event queue',
+      buttons: [
+        { label: 'Queue event', onClick: handleQueuedEvent, color: 'bg-amber-600 hover:bg-amber-700' },
+        { label: 'Flush queue', onClick: handleFlushQueue, color: 'bg-teal-600 hover:bg-teal-700' },
+      ],
+    },
+  ];
+
   return (
-    <section className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-      <h2 className="text-2xl font-semibold text-gray-900 mb-4">
-        Event Collection Demo
-      </h2>
+    <div className="bg-white rounded-xl border border-gray-200 p-6">
+      <div className="space-y-6">
+        {groups.map((group) => (
+          <div key={group.label}>
+            <p className="text-xs font-medium uppercase tracking-wide text-gray-500 mb-2">
+              {group.label}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {group.buttons.map((button) => (
+                <button
+                  key={button.label}
+                  onClick={button.onClick}
+                  className={`px-4 py-2 text-sm text-white rounded-lg transition-colors ${button.color}`}
+                >
+                  {button.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
 
-      <div className="flex flex-wrap gap-3 mb-4">
-        <button
-          onClick={handleViewEvent}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-        >
-          Send VIEW event
-        </button>
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wide text-gray-500 mb-2">
+            Identity
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <input
+              type="email"
+              placeholder="user@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+            />
+            <button
+              onClick={handleIdentityEvent}
+              className="px-4 py-2 text-sm text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors"
+            >
+              Send IDENTITY
+            </button>
+          </div>
+        </div>
 
-        <input
-          type="email"
-          placeholder="user@example.com"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-        />
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wide text-gray-500 mb-2">
+            Event log
+          </p>
+          <pre className="bg-gray-900 text-green-400 p-4 rounded-lg min-h-[120px] max-h-[240px] overflow-auto text-xs font-mono">
+            {log.length ? log.join('\n') : 'Waiting for events...'}
+          </pre>
+        </div>
 
-        <button
-          onClick={handleIdentityEvent}
-          className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-        >
-          Send IDENTITY event
-        </button>
-
-        <button
-          onClick={handleCustomEvent}
-          className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
-        >
-          Send Custom Event
-        </button>
-
-        <button
-          onClick={handleFormEvent}
-          className="px-4 py-2 bg-pink-600 text-white rounded-lg hover:bg-pink-700 transition-colors"
-        >
-          Send FORM event
-        </button>
-
-        <button
-          onClick={handleOrderEvent}
-          className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-        >
-          Send ORDER event
-        </button>
-
-        <button
-          onClick={handleQueuedEvent}
-          className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors"
-        >
-          Queue Event
-        </button>
-
-        <button
-          onClick={handleFlushQueue}
-          className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
-        >
-          Flush Queue
-        </button>
+        <p className="text-xs text-gray-500">
+          Open DevTools → Network, filter for{' '}
+          <code className="bg-gray-100 px-1 rounded">
+            edge-platform.sitecorecloud.io/events
+          </code>{' '}
+          to verify event requests.
+        </p>
       </div>
-
-      <pre className="bg-gray-900 text-green-400 p-4 rounded-lg min-h-[120px] overflow-auto text-sm font-mono">
-        {log.length ? log.join('\n') : 'Waiting for events...'}
-      </pre>
-
-      <p className="text-sm text-gray-500 mt-4">
-        Open DevTools → Network, filter for{' '}
-        <code className="bg-gray-100 px-1 rounded">
-          edge-platform.sitecorecloud.io/events
-        </code>{' '}
-        to verify event requests.
-      </p>
-    </section>
+    </div>
   );
 }

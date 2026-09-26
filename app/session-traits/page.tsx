@@ -4,48 +4,36 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { runInteractiveExperience } from '@/src/sitecore/personalize/interactive';
 
-interface DecisionResponse {
+interface SessionTraitsResponse {
+  mostViewedCategory?: string;
   persona?: string;
   message?: string;
-  mostViewedCategory?: string;
   [key: string]: unknown;
 }
 
-export default function PersonalizationPage() {
-  const [result, setResult] = useState<DecisionResponse | null>(null);
+export default function SessionTraitsPage() {
+  const [result, setResult] = useState<SessionTraitsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  async function fetchExperience() {
+  async function fetchTraits() {
     setLoading(true);
     setError(null);
     setResult(null);
 
     try {
       const response = await runInteractiveExperience({
-        friendlyId: 'demo_interactive',
+        friendlyId: 'session_traits_demo',
         channel: 'WEB',
         currency: 'USD',
-        pointOfSale: process.env.SITECORE_CDP_POINTOFSALE || 'honda-mideast',
       });
-      setResult(response as DecisionResponse);
+      setResult(response as SessionTraitsResponse);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
       setLoading(false);
     }
   }
-
-  const getPersonaColor = (persona?: string) => {
-    switch (persona) {
-      case 'VIP':
-        return 'bg-yellow-50 border-yellow-200 text-yellow-800';
-      case 'Engaged':
-        return 'bg-green-50 border-green-200 text-green-800';
-      default:
-        return 'bg-gray-50 border-gray-200 text-gray-800';
-    }
-  };
 
   return (
     <main className="min-h-screen bg-gray-50 p-8">
@@ -73,18 +61,31 @@ export default function PersonalizationPage() {
         </Link>
 
         <h1 className="text-4xl font-bold text-gray-900 mb-4">
-          Personalize Interactive Experience
+          Session Traits Demo
         </h1>
         <p className="text-lg text-gray-600 mb-8">
-          Runs a Sitecore Personalize Interactive Experience with Decision Model and displays the result.
+          Session Traits aggregate events from a web session, calculate a value
+          at session end, and store it on the guest profile. This demo reads
+          the stored trait value from an Interactive Experience.
         </p>
 
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+          <p className="text-sm text-blue-900">
+            <strong>Prerequisite:</strong> A Session Trait named{' '}
+            <code className="bg-blue-100 px-1 rounded">MostViewedCategory</code>{' '}
+            must be configured and activated in Sitecore CDP under{' '}
+            <strong>Developer center → Session traits</strong>. The guest must
+            be identified (a customer, not an anonymous visitor) for the trait
+            to be calculated.
+          </p>
+        </div>
+
         <button
-          onClick={fetchExperience}
+          onClick={fetchTraits}
           disabled={loading}
           className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
         >
-          {loading ? 'Running Experience…' : 'Run Experience'}
+          {loading ? 'Loading Traits…' : 'Load Session Traits'}
         </button>
 
         {error && (
@@ -107,20 +108,22 @@ export default function PersonalizationPage() {
             )}
 
             {result.persona && (
-              <div className={`p-4 border rounded-lg ${getPersonaColor(result.persona)}`}>
-                <span className="text-sm font-medium uppercase tracking-wide opacity-70">
+              <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <span className="text-sm font-medium uppercase tracking-wide text-yellow-700">
                   Persona
                 </span>
-                <p className="text-2xl font-bold">{result.persona}</p>
+                <p className="text-2xl font-bold text-yellow-900">
+                  {result.persona}
+                </p>
               </div>
             )}
 
             {result.message && (
-              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <span className="text-sm font-medium uppercase tracking-wide text-blue-600">
+              <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+                <span className="text-sm font-medium uppercase tracking-wide text-green-700">
                   Message
                 </span>
-                <p className="text-xl text-blue-900">{result.message}</p>
+                <p className="text-xl text-green-900">{result.message}</p>
               </div>
             )}
 

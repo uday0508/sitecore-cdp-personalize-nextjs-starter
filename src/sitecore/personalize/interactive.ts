@@ -4,8 +4,8 @@ export interface PersonalizeData {
   friendlyId: string;
   channel: string;
   currency: string;
+  pointOfSale: string;
   language?: string;
-  params?: Record<string, string>;
 }
 
 export async function runInteractiveExperience(
